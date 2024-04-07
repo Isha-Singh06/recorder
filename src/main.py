@@ -37,7 +37,7 @@ class Application(tornado.web.Application):
             (r"/", DemoHandler),
             (r"/frames", FrameHandler),
             (r"/twod", TwoDHandler),
-            (r"/sp2tx", Sp2txHandler),
+            # (r"/sp2tx", Sp2txHandler),
             (r"/(.*)", tornado.web.StaticFileHandler, {"path": "templates", "default_filename": "index.html"})
         ]
         settings = dict(
@@ -68,16 +68,16 @@ class Application(tornado.web.Application):
             if msg is None: break
             self.last_frame = msg
 
-    @tornado.gen.coroutine
-    def subscribe_sp2tx(self):
-        ''' Subscribe to /sp2tx via a websocket client connection '''
-        websocket_server = f"ws://{self.args.websocket_server}/sp2tx"
-        print(f"connecting to: {websocket_server}")
-        conn = yield tornado.websocket.websocket_connect(websocket_server)
-        while True:
-            msg = yield conn.read_message()
-            if msg is None: break
-            self.last_sp2tx = msg
+    # @tornado.gen.coroutine
+    # def subscribe_sp2tx(self):
+    #     ''' Subscribe to /sp2tx via a websocket client connection '''
+    #     websocket_server = f"ws://{self.args.websocket_server}/sp2tx"
+    #     print(f"connecting to: {websocket_server}")
+    #     conn = yield tornado.websocket.websocket_connect(websocket_server)
+    #     while True:
+    #         msg = yield conn.read_message()
+    #         if msg is None: break
+    #         self.last_sp2tx = msg
 
     @tornado.gen.coroutine
     def subscribe_twod(self):
@@ -89,20 +89,21 @@ class Application(tornado.web.Application):
             msg = yield conn.read_message()
             if msg is None: break
             if self.last_frame is None: break
-            if self.last_sp2tx is None: break
+            # if self.last_sp2tx is None: break
             FrameHandler.send_updates(self.last_frame)
             TwoDHandler.send_2d(msg)
-            Sp2txHandler.send_sp2tx(self.last_sp2tx)
+            # Sp2txHandler.send_sp2tx(self.last_sp2tx)
             with open(os.path.join(self.args.data_path, f"{ms()}.pkl"), 'wb') as f:
                 # this read should be threadsafe as we have should be threadsafe until the yield
-                pickle.dump({'frame': self.last_frame, 'sp2tx': self.last_sp2tx, 'twod': msg}, f, protocol=pickle.HIGHEST_PROTOCOL)
+                # pickle.dump({'frame': self.last_frame, 'sp2tx': self.last_sp2tx, 'twod': msg}, f, protocol=pickle.HIGHEST_PROTOCOL)
+                pickle.dump({'frame': self.last_frame, 'twod': msg}, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     def playback(self):
         with open(self.pkls[self.i], 'rb') as f:
             res = pickle.load(f)
             TwoDHandler.send_2d(res['twod'])
             FrameHandler.send_updates(res['frame'])
-            Sp2txHandler.send_sp2tx(res['sp2tx'])
+            # Sp2txHandler.send_sp2tx(res['sp2tx'])
         self.i += 1
         if self.i >= len(self.pkls):
             self.i = 0
@@ -169,32 +170,32 @@ class FrameHandler(tornado.websocket.WebSocketHandler):
                 logging.error("Error sending message", exc_info=True)
 
 
-class Sp2txHandler(tornado.websocket.WebSocketHandler):
-    waiters = set()
+# class Sp2txHandler(tornado.websocket.WebSocketHandler):
+#     waiters = set()
 
-    def check_origin(self, origin):
-        '''Allow from all origins'''
-        return True
+#     def check_origin(self, origin):
+#         '''Allow from all origins'''
+#         return True
 
-    def get_compression_options(self):
-        # Non-None enables compression with default options.
-        return {}
+#     def get_compression_options(self):
+#         # Non-None enables compression with default options.
+#         return {}
 
-    def open(self):
-        Sp2txHandler.waiters.add(self)
-        logging.info("connect: there are now %d connections", len(self.waiters))
+#     def open(self):
+#         Sp2txHandler.waiters.add(self)
+#         logging.info("connect: there are now %d connections", len(self.waiters))
 
-    def on_close(self):
-        Sp2txHandler.waiters.remove(self)
-        logging.info("disconnect: there are now %d connections", len(self.waiters))
+#     def on_close(self):
+#         Sp2txHandler.waiters.remove(self)
+#         logging.info("disconnect: there are now %d connections", len(self.waiters))
 
-    @classmethod
-    def send_sp2tx(cls, sp2tx):
-        for waiter in cls.waiters:
-            try:
-                waiter.write_message(sp2tx)
-            except:
-                logging.error("Error sending message", exc_info=True)
+#     @classmethod
+#     def send_sp2tx(cls, sp2tx):
+#         for waiter in cls.waiters:
+#             try:
+#                 waiter.write_message(sp2tx)
+#             except:
+#                 logging.error("Error sending message", exc_info=True)
 
 def main():
     args = parser.parse_args()
@@ -208,7 +209,7 @@ def main():
         pathlib.Path(args.data_path).mkdir(parents=True, exist_ok=True)
         tornado.ioloop.IOLoop.current().spawn_callback(app.subscribe_frames)
         tornado.ioloop.IOLoop.current().spawn_callback(app.subscribe_twod)
-        tornado.ioloop.IOLoop.current().spawn_callback(app.subscribe_sp2tx)
+        # tornado.ioloop.IOLoop.current().spawn_callback(app.subscribe_sp2tx)
     else:
         if args.websocket_server:
             raise RuntimeError("Please remove the --websocker-server flag when playing back locally recorded data")
